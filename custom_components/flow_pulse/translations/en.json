@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Flow Pulse",
+        "description": "Manage your automations from the dashboard: turn them on or off, run them, and snooze them for a while. Flow Pulse adds the Flow Pulse card to every dashboard."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Flow Pulse is already set up."
+    }
+  },
+  "services": {
+    "snooze": {
+      "name": "Snooze automations",
+      "description": "Turns automations off now and back on later. An automation that is already off and not snoozed is left alone; a run in progress finishes.",
+      "fields": {
+        "duration": {
+          "name": "For",
+          "description": "How long to snooze. Use this or Until."
+        },
+        "until": {
+          "name": "Until",
+          "description": "When the automations turn back on. Use this or For. At most 30 days ahead."
+        }
+      }
+    },
+    "resume": {
+      "name": "Resume automations",
+      "description": "Ends the snooze of automations now and turns them back on."
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "Flow Pulse isn't set up. Add it under Settings → Devices & services."
+    },
+    "no_automations": {
+      "message": "Pick at least one automation."
+    },
+    "duration_or_until": {
+      "message": "Give either For or Until, not both."
+    },
+    "in_the_past": {
+      "message": "The snooze must end in the future."
+    },
+    "too_long": {
+      "message": "A snooze can last at most 30 days."
+    }
+  }
+}

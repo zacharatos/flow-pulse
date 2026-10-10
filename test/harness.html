@@ -1,0 +1,206 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Flow Pulse Card – test harness</title>
+<script src="icons.js"></script>
+<style>
+  :root {
+    --primary-color: #03a9f4;
+    --primary-text-color: #212121;
+    --secondary-text-color: #727272;
+    --text-primary-color: #ffffff;
+    --card-background-color: #ffffff;
+    --divider-color: #e0e0e0;
+    --amber-color: #ffc107; --orange-color: #ff9800; --red-color: #f44336; --green-color: #4caf50;
+    --ha-card-border-radius: 12px;
+    font-family: Roboto, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { margin: 0; padding: 24px; background: #fafafa; }
+  body.dark {
+    --primary-text-color: #e1e1e1; --secondary-text-color: #9b9b9b;
+    --card-background-color: #1c1c1c; --divider-color: rgba(225,225,225,.12);
+    background: #111111;
+  }
+  .grid { display: grid; grid-template-columns: repeat(3, 380px); gap: 24px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  .cap { font: 12px system-ui; color: var(--secondary-text-color); margin: 0 0 6px 2px; }
+  #log { font: 12px monospace; color: var(--secondary-text-color); margin-top: 16px; white-space: pre-wrap; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } body { padding: 12px; } }
+</style>
+<script>
+  // --- Stubs for HA's own elements (same as the other Pulse card harnesses) ----------
+  class HaIcon extends HTMLElement {
+    static get observedAttributes() { return ["icon"]; }
+    set icon(v) { this._icon = v; this.draw(); } get icon() { return this._icon; }
+    attributeChangedCallback() { this._icon = this.getAttribute("icon"); this.draw(); }
+    connectedCallback() { this.style.display = "inline-flex"; this.draw(); }
+    draw() {
+      if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      const p = window.MDI[this._icon];
+      const s = "var(--mdc-icon-size, 24px)";
+      if (this._icon && !p) console.warn("missing icon", this._icon);
+      this.shadowRoot.innerHTML = p ? `<svg viewBox="0 0 24 24" style="width:${s};height:${s};fill:currentColor"><path d="${p}"/></svg>` : `<span style="width:${s};height:${s};display:inline-block;background:red"></span>`;
+    }
+  }
+  customElements.define("ha-icon", HaIcon);
+  class HaCard extends HTMLElement {
+    constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = `<style>:host{display:block;background:var(--ha-card-background,var(--card-background-color));
+      border-radius:var(--ha-card-border-radius,12px);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color));
+      color:var(--primary-text-color);box-sizing:border-box;box-shadow:var(--ha-card-box-shadow,none);-webkit-backdrop-filter:var(--ha-card-backdrop-filter,none);backdrop-filter:var(--ha-card-backdrop-filter,none)}</style><slot></slot>`; }
+  }
+  customElements.define("ha-card", HaCard);
+</script>
+<script type="module">
+  // ?theme=pulse|glass|tonal applies a Pulse theme from the sibling pulse-theme repo, the way HA does.
+  {
+    const q = new URLSearchParams(location.search);
+    if (q.get("theme")) {
+      const { applyPulseTheme } = await import("../../pulse-theme/test/apply-theme.mjs");
+      await applyPulseTheme(q.get("theme"), q.has("dark"), document.body);
+      document.body.style.background = "var(--lovelace-background, var(--primary-background-color))";
+      document.body.style.fontFamily = "var(--ha-font-family-body)";
+    }
+  }
+  await import("../custom_components/flow_pulse/frontend/flow-pulse-card.js");
+
+  const q = new URLSearchParams(location.search);
+  if (q.has("dark")) document.body.classList.add("dark");
+  const lang = q.get("lang") || "en";
+  const now = Date.now();
+  const ago = (m) => new Date(now - m * 60000).toISOString();
+  const inMins = (m) => new Date(now + m * 60000).toISOString();
+
+  // An invented home. Never put real entity ids, names or photos here.
+  const states = {};
+  const entities = {};
+  const add = (entity_id, state, attributes = {}, reg = {}) => {
+    states[entity_id] = { entity_id, state, attributes: { mode: "single", current: 0, ...attributes }, last_changed: ago(5), last_updated: ago(5) };
+    entities[entity_id] = { entity_id, ...reg };
+  };
+  add("automation.porch_light_at_dusk", "on", { id: "porch", friendly_name: "Porch Light at Dusk", icon: "mdi:lightbulb-night-outline", last_triggered: ago(7 * 60) }, { labels: ["dashboard", "lights"], area_id: "outside" });
+  add("automation.towel_rail_mornings", "off", { id: "towel", friendly_name: "Towel Rail Mornings", last_triggered: ago(60 * 24 * 210) }, { labels: ["dashboard", "climate"], area_id: "bathroom" });
+  add("automation.study_lamp_follows_pc", "on", { id: "study", friendly_name: "Study Lamp Follows PC", last_triggered: ago(60 * 24 * 90) }, { labels: ["dashboard", "lights"], area_id: "study" });
+  add("automation.disarm_on_wake", "on", { id: "disarm", friendly_name: "Disarm When We Wake Up", icon: "mdi:shield-home-outline", last_triggered: ago(3 * 60) }, { labels: ["dashboard", "security"] });
+  add("automation.laundry_done", "on", { id: "laundry", friendly_name: "Laundry Done Reminder", icon: "mdi:washing-machine", last_triggered: ago(2), current: 1 }, { labels: ["dashboard"], area_id: "utility" });
+  add("automation.coffee_on_weekdays", "off", { id: "coffee", friendly_name: "Coffee on Weekdays", icon: "mdi:coffee-outline", last_triggered: ago(60 * 26) }, { labels: ["dashboard"], area_id: "kitchen" });
+  add("automation.old_motion_lights", "unavailable", { friendly_name: "Old Motion Lights" }, { labels: ["dashboard", "lights"] });
+  add("automation.never_used", "on", { id: "never", friendly_name: "Guest Mode Welcome", last_triggered: null }, {});
+  add("automation.helper_internal", "on", { id: "helper", friendly_name: "Internal Helper" }, { hidden: true });
+
+  let snoozes = { "automation.coffee_on_weekdays": inMins(60 * 18) };
+  const traces = [
+    { item_id: "disarm", run_id: "1", timestamp: { start: ago(3 * 60) }, script_execution: "error", error: "Alarm panel unavailable" },
+    { item_id: "porch", run_id: "2", timestamp: { start: ago(7 * 60) }, script_execution: "finished" },
+  ];
+  const labels = [
+    { label_id: "dashboard", name: "Dashboard" }, { label_id: "lights", name: "Lights" },
+    { label_id: "climate", name: "Climate" }, { label_id: "security", name: "Security" },
+  ];
+  const areas = {
+    outside: { area_id: "outside", name: lang === "el" ? "Έξω" : "Outside" }, bathroom: { area_id: "bathroom", name: lang === "el" ? "Μπάνιο" : "Bathroom" },
+    study: { area_id: "study", name: lang === "el" ? "Γραφείο" : "Study" }, utility: { area_id: "utility", name: lang === "el" ? "Πλυσταριό" : "Utility" },
+    kitchen: { area_id: "kitchen", name: lang === "el" ? "Κουζίνα" : "Kitchen" },
+  };
+  if (lang === "el") {
+    const el = { porch_light_at_dusk: "Φως βεράντας στο σούρουπο", towel_rail_mornings: "Πετσετοκρεμάστρα το πρωί", study_lamp_follows_pc: "Λάμπα γραφείου με το PC", disarm_on_wake: "Αφόπλιση όταν ξυπνάμε", laundry_done: "Υπενθύμιση πλυντηρίου", coffee_on_weekdays: "Καφές τις καθημερινές", old_motion_lights: "Παλιά φώτα κίνησης", never_used: "Καλωσόρισμα επισκεπτών" };
+    for (const [k, v] of Object.entries(el)) states[`automation.${k}`].attributes.friendly_name = v;
+  }
+
+  const subscribers = new Set();
+  const cards = [];
+  const log = (...a) => { document.getElementById("log").textContent += a.map((x) => typeof x === "string" ? x : JSON.stringify(x)).join(" ") + "\n"; };
+  function makeHass() {
+    return {
+      states: { ...states },
+      entities,
+      areas,
+      user: { is_admin: !q.has("user") },
+      language: lang,
+      locale: { language: lang, time_format: "24" },
+      themes: { darkMode: q.has("dark") },
+      connection: {
+        subscribeMessage: async (cb, msg) => {
+          if (msg.type !== "flow_pulse/subscribe" || q.has("nosnooze")) throw { code: "unknown_command" };
+          subscribers.add(cb);
+          cb({ snoozes });
+          return () => subscribers.delete(cb);
+        },
+      },
+      callWS: async (msg) => {
+        log("callWS", msg.type);
+        if (msg.type === "trace/list") return traces;
+        if (msg.type === "config/label_registry/list") return labels;
+        if (msg.type === "config/category_registry/list") return [{ category_id: "c_morning", name: "Morning" }, { category_id: "c_evening", name: "Evening" }];
+        if (msg.type === "config/entity_registry/get_entries")
+          return Object.fromEntries(msg.entity_ids.map((id) => [id, { categories: { automation: /disarm|towel|coffee/.test(id) ? "c_morning" : /porch|laundry/.test(id) ? "c_evening" : undefined } }]));
+        throw new Error("unknown " + msg.type);
+      },
+      callService: async (domain, service, data, target) => {
+        log("callService", domain, service, data, target);
+        setTimeout(() => apply(domain, service, data, target), 500);
+      },
+    };
+  }
+  function setState(id, patch) {
+    const s = states[id];
+    states[id] = { ...s, ...patch, attributes: { ...s.attributes, ...(patch.attributes ?? {}) }, last_changed: new Date().toISOString(), last_updated: new Date().toISOString() };
+  }
+  // A small fake of Home Assistant answering the card's actions.
+  function apply(domain, service, data, target) {
+    const id = target.entity_id;
+    if (domain === "automation" && service === "turn_on") { setState(id, { state: "on" }); delete snoozes[id]; }
+    if (domain === "automation" && service === "turn_off") setState(id, { state: "off", attributes: { current: 0 } });
+    if (domain === "automation" && service === "trigger") setState(id, { attributes: { last_triggered: new Date().toISOString(), current: 1 } });
+    if (domain === "flow_pulse" && service === "snooze") { snoozes = { ...snoozes, [id]: new Date(Date.now() + data.duration.minutes * 60000).toISOString() }; setState(id, { state: "off" }); }
+    if (domain === "flow_pulse" && service === "resume") { const { [id]: _, ...rest } = snoozes; snoozes = rest; setState(id, { state: "on" }); }
+    for (const cb of subscribers) cb({ snoozes });
+    const hass = makeHass();
+    for (const c of cards) c.hass = hass;
+  }
+
+  const scenarios = [
+    { col: 0, cap: "Label “dashboard”: on, off, running, failed, snoozed, needs a look", config: { label: "dashboard", confirm: ["automation.disarm_on_wake"] } },
+    { col: 1, cap: "Grouped by label (the selecting label is skipped)", config: { label: "dashboard", group_by: "label", title: lang === "el" ? "Ανά ετικέτα" : "By label" } },
+    { col: 1, cap: "Explicit list, no title: header only when something needs a look", config: { title: "", entities: ["automation.porch_light_at_dusk", "automation.study_lamp_follows_pc"] } },
+    { col: 2, cap: "Grouped by area", config: { label: "dashboard", group_by: "area", exclude: ["automation.old_motion_lights"] } },
+    { col: 2, cap: "Empty: a label nobody has", config: { label: "nothing" } },
+  ];
+
+  const cols = [...document.querySelectorAll(".col")];
+  const hass = makeHass();
+  for (const s of scenarios) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<p class="cap">${s.cap}</p>`;
+    const card = document.createElement("flow-pulse-card");
+    card.setConfig({ type: "custom:flow-pulse-card", ...s.config });
+    card.hass = hass;
+    card.addEventListener("hass-action", (e) => {
+      log("hass-action", e.detail.config);
+      const t = e.detail.config.tap_action;
+      if (t.action === "perform-action" && confirm(t.confirmation?.text ?? "OK?")) {
+        const [domain, service] = t.perform_action.split(".");
+        apply(domain, service, t.data ?? {}, t.target);
+      }
+    });
+    card.addEventListener("hass-notification", (e) => log("toast", e.detail.message));
+    cards.push(card);
+    wrap.appendChild(card);
+    cols[s.col].appendChild(wrap);
+  }
+  // ?menu=1 opens the first card's menu on its failed row, for screenshots.
+  if (q.has("menu")) {
+    setTimeout(() => {
+      const root = cards[0].shadowRoot;
+      root.querySelector('.row[data-eid="automation.porch_light_at_dusk"] .more').click();
+    }, 400);
+  }
+</script>
+</head>
+<body>
+  <div class="grid"><div class="col"></div><div class="col"></div><div class="col"></div></div>
+  <div id="log"></div>
+</body>
+</html>

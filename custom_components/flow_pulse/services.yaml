@@ -1,0 +1,17 @@
+snooze:
+  target:
+    entity:
+      domain: automation
+  fields:
+    duration:
+      example: "01:00:00"
+      selector:
+        duration:
+    until:
+      example: "2026-10-11 07:00:00"
+      selector:
+        datetime:
+resume:
+  target:
+    entity:
+      domain: automation

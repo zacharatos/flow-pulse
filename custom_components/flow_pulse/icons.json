@@ -1,0 +1,6 @@
+{
+  "services": {
+    "snooze": { "service": "mdi:alarm-snooze" },
+    "resume": { "service": "mdi:alarm-off" }
+  }
+}
